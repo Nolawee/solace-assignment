@@ -4,7 +4,7 @@
 
 I originally was a bit on autopilot and merged my PRs into main in my original repo, just due to my current workflow at my job. When I remembered we wanted a link to all my open PRs and for main to be the original zip file so it's easy to review, I decided to finish the rest of the project locally and create a new repo with a clean commit history and one PR that details my main changes.
 
-**Link to original repo's PRs:** [_Add link here if applicable_]
+**Link to original repo's PRs:** [http://github.com/Nolawee/solace-candidate-assignment/pulls?q=is%3Apr+is%3Aclosed]
 
 ---
 
