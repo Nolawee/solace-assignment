@@ -1,91 +1,156 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Advocate } from "./components/AdvocateCard";
+import Search from "./components/Search";
+import AdvocateList from "./components/AdvocateList";
+import Navbar from "./components/ui/navbar";
+
+const STATUS_CODES = {
+  IDLE: "idle",
+  LOADING: "loading",
+  SUCCESS: "success",
+  ERROR: "error"
+}
+
+const DEGREE_FILTERS = [
+  { label: "MD", value: "MD" },
+  { label: "PhD", value: "PhD" },
+  { label: "MSW", value: "MSW" },
+];
+
+const EXPERIENCE_SORT_OPTIONS = [
+  { label: "Experience ↑", value: "asc" },
+  { label: "Experience ↓", value: "desc" },
+];
+
+const DEFAULT_SORT = EXPERIENCE_SORT_OPTIONS[0].value;
+
+const areArraysEqual = (first: string[], second: string[]) => {
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  const firstSorted = [...first].sort();
+  const secondSorted = [...second].sort();
+
+  return firstSorted.every((value, index) => value === secondSorted[index]);
+};
 
 export default function Home() {
-  const [advocates, setAdvocates] = useState([]);
-  const [filteredAdvocates, setFilteredAdvocates] = useState([]);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [advocates, setAdvocates] = useState<Advocate[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [status, setStatus] = useState(STATUS_CODES.LOADING); // loading | success | error
+  const [error, setError] = useState(null);
+  const [degreeFilters, setDegreeFilters] = useState<string[]>([]);
+  const [experienceSort, setExperienceSort] = useState<string>(DEFAULT_SORT);
 
+  // Initialize search term from URL on mount
   useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
-        setAdvocates(jsonResponse.data);
-        setFilteredAdvocates(jsonResponse.data);
-      });
-    });
-  }, []);
-
-  const onChange = (e) => {
-    const searchTerm = e.target.value;
-
-    document.getElementById("search-term").innerHTML = searchTerm;
-
-    console.log("filtering advocates...");
-    const filteredAdvocates = advocates.filter((advocate) => {
-      return (
-        advocate.firstName.includes(searchTerm) ||
-        advocate.lastName.includes(searchTerm) ||
-        advocate.city.includes(searchTerm) ||
-        advocate.degree.includes(searchTerm) ||
-        advocate.specialties.includes(searchTerm) ||
-        advocate.yearsOfExperience.includes(searchTerm)
+    const qParam = searchParams.get("q") ?? "";
+    const degreeParams = searchParams
+      .getAll("degree")
+      .filter((degree) =>
+        DEGREE_FILTERS.some((option) => option.value === degree)
       );
-    });
+    const sortParam = searchParams.get("sort");
+    const nextSort =
+      sortParam === "asc" || sortParam === "desc" ? sortParam : DEFAULT_SORT;
 
-    setFilteredAdvocates(filteredAdvocates);
+    setSearchTerm((prev) => (prev === qParam ? prev : qParam));
+
+    setDegreeFilters((prev) =>
+      areArraysEqual(prev, degreeParams) ? prev : degreeParams
+    );
+
+    setExperienceSort((prev) => (prev === nextSort ? prev : nextSort));
+  }, [searchParams]);
+
+  // Fetch advocates from API with debouncing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      console.log("fetching advocates...");
+      setStatus(STATUS_CODES.LOADING);
+
+      // Build the API URL with query parameter if search term exists
+      const params = new URLSearchParams();
+      if (searchTerm) {
+        params.set("q", searchTerm);
+      }
+      degreeFilters.forEach((degree) => {
+        params.append("degree", degree);
+      });
+      if (experienceSort && experienceSort !== DEFAULT_SORT) {
+        params.set("sort", experienceSort);
+      }
+
+      const queryString = params.toString();
+      const url = queryString ? `/api/advocates?${queryString}` : "/api/advocates";
+
+      fetch(url)
+        .then((response) => response.json())
+        .then((jsonResponse) => {
+          setAdvocates(jsonResponse.data);
+          setStatus(STATUS_CODES.SUCCESS);
+        })
+        .catch((error) => {
+          setError(error.message || String(error));
+          setStatus(STATUS_CODES.ERROR);
+        });
+
+      // Update URL with search term and filters
+      const nextPath = queryString ? `?${queryString}` : "/";
+      router.push(nextPath);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, degreeFilters, experienceSort, router]);
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
   };
 
-  const onClick = () => {
-    console.log(advocates);
-    setFilteredAdvocates(advocates);
+  const onReset = () => {
+    setSearchTerm("");
+    setDegreeFilters([]);
+    setExperienceSort(DEFAULT_SORT);
   };
+
+  const canReset =
+    searchTerm.trim().length > 0 ||
+    degreeFilters.length > 0 ||
+    experienceSort !== DEFAULT_SORT;
 
   return (
-    <main style={{ margin: "24px" }}>
-      <h1>Solace Advocates</h1>
-      <br />
-      <br />
-      <div>
-        <p>Search</p>
-        <p>
-          Searching for: <span id="search-term"></span>
-        </p>
-        <input style={{ border: "1px solid black" }} onChange={onChange} />
-        <button onClick={onClick}>Reset Search</button>
-      </div>
-      <br />
-      <br />
-      <table>
-        <thead>
-          <th>First Name</th>
-          <th>Last Name</th>
-          <th>City</th>
-          <th>Degree</th>
-          <th>Specialties</th>
-          <th>Years of Experience</th>
-          <th>Phone Number</th>
-        </thead>
-        <tbody>
-          {filteredAdvocates.map((advocate) => {
-            return (
-              <tr>
-                <td>{advocate.firstName}</td>
-                <td>{advocate.lastName}</td>
-                <td>{advocate.city}</td>
-                <td>{advocate.degree}</td>
-                <td>
-                  {advocate.specialties.map((s) => (
-                    <div>{s}</div>
-                  ))}
-                </td>
-                <td>{advocate.yearsOfExperience}</td>
-                <td>{advocate.phoneNumber}</td>
-              </tr>
+    <main className="mt-6 py-3 rounded-xl bg-[#fffdfa]">
+      <Navbar />
+      <div className="mx-auto w-[90vw] space-y-6">
+        <Search 
+          searchTerm={searchTerm}
+          onChange={onChange}
+          onReset={onReset}
+          resultsCount={advocates.length}
+          selectedFilters={degreeFilters}
+          onFilterChange={(degree) => {
+            setDegreeFilters((prev) =>
+              prev.includes(degree)
+                ? prev.filter((item) => item !== degree)
+                : [...prev, degree]
             );
-          })}
-        </tbody>
-      </table>
+          }}
+          filterOptions={DEGREE_FILTERS}
+          selectedSort={experienceSort}
+          onSortChange={setExperienceSort}
+          sortOptions={EXPERIENCE_SORT_OPTIONS}
+          canReset={canReset}
+        />
+        {status === STATUS_CODES.LOADING && <div className="text-sm text-gray-500">Loading...</div>}
+        {status === STATUS_CODES.ERROR && <div className="text-sm text-red-500">{error}</div>}
+        {status === STATUS_CODES.SUCCESS &&  <AdvocateList advocates={advocates} />}
+      </div>
     </main>
   );
 }
